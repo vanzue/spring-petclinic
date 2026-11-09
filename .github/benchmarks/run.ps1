@@ -55,9 +55,14 @@ if ($IsWindows) {
     Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors |
         Format-List | Out-File (Join-Path $results 'hardware.log')
 } else {
-    & df -h $project | Out-File (Join-Path $results 'storage.log')
-    & diskutil info $project | Out-File (Join-Path $results 'storage-details.log')
+    $volumes = @(& df -P $project)
+    if ($LASTEXITCODE -ne 0) { throw ' ERROR - Cannot identify the workload volume.' }
+    $volumes | Out-File (Join-Path $results 'storage.log')
+    $device = ($volumes[-1].Trim() -split '\s+')[0]
+    & diskutil info $device | Out-File (Join-Path $results 'storage-details.log')
+    if ($LASTEXITCODE -ne 0) { throw ' ERROR - Cannot inspect the workload volume.' }
     & sysctl hw.model hw.memsize hw.ncpu machdep.cpu.brand_string | Out-File (Join-Path $results 'hardware.log')
+    if ($LASTEXITCODE -ne 0) { throw ' ERROR - Cannot inspect the runner hardware.' }
 }
 
 function Invoke-MavenPhase {
