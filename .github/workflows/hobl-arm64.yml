@@ -1,0 +1,79 @@
+name: HOBL PetClinic ARM64 Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      loops:
+        description: Offline build and test iterations (1-20)
+        type: number
+        default: 5
+        required: true
+  push:
+    branches: [main, vanzue/hobl-arm64-ci]
+    paths:
+      - .github/workflows/hobl-arm64.yml
+      - .github/benchmarks/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hobl-arm64-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: ${{ matrix.platform }} ARM64
+    if: github.repository == 'vanzue/spring-petclinic'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            runner: windows-11-arm
+          - platform: macOS
+            runner: macos-15
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      BENCHMARK_LOOPS: ${{ inputs.loops || 5 }}
+      JAVA_TOOL_OPTIONS: ''
+      _JAVA_OPTIONS: ''
+      JDK_JAVA_OPTIONS: ''
+      MAVEN_OPTS: ''
+      MAVEN_ARGS: ''
+    steps:
+      - name: Preserve identical checkout bytes
+        run: git config --global core.autocrlf false
+      - name: Check out benchmark automation
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Read workload pin
+        id: pins
+        run: |
+          $pins = Get-Content .github/benchmarks/pins.json -Raw | ConvertFrom-Json
+          "commit=$($pins.workload_commit)" | Add-Content $env:GITHUB_OUTPUT
+      - name: Check out HOBL's pinned workload
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: spring-projects/spring-petclinic
+          ref: ${{ steps.pins.outputs.commit }}
+          path: workload
+          persist-credentials: false
+      - name: Install and verify exact Microsoft ARM64 JDK
+        run: ./.github/benchmarks/setup.ps1
+      - name: Prepare dependencies and benchmark
+        run: ./.github/benchmarks/run.ps1 -Loops ([int]$env:BENCHMARK_LOOPS)
+      - name: Upload timings, environment and per-loop logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: petclinic-${{ matrix.platform }}-arm64-${{ github.run_attempt }}
+          path: .benchmark/results
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
