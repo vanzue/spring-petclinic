@@ -8,6 +8,12 @@ on:
         type: number
         default: 5
         required: true
+      windows_storage:
+        description: Windows workload storage (DevDrive creates a fresh ReFS VHDX)
+        type: choice
+        options: [NTFS, DevDrive]
+        default: NTFS
+        required: true
   push:
     branches: [main, vanzue/hobl-arm64-ci]
     paths:
@@ -18,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: hobl-arm64-${{ github.ref }}
+  group: hobl-arm64-${{ github.ref }}-${{ inputs.windows_storage || 'NTFS' }}
   cancel-in-progress: true
 
 jobs:
@@ -40,6 +46,7 @@ jobs:
         shell: pwsh
     env:
       BENCHMARK_LOOPS: ${{ inputs.loops || 5 }}
+      WINDOWS_STORAGE: ${{ inputs.windows_storage || 'NTFS' }}
       JAVA_TOOL_OPTIONS: ''
       _JAVA_OPTIONS: ''
       JDK_JAVA_OPTIONS: ''
@@ -64,6 +71,9 @@ jobs:
           ref: ${{ steps.pins.outputs.commit }}
           path: workload
           persist-credentials: false
+      - name: Configure Windows benchmark storage
+        if: runner.os == 'Windows'
+        run: ./.github/benchmarks/storage.ps1 -Storage $env:WINDOWS_STORAGE
       - name: Install and verify exact Microsoft ARM64 JDK
         run: ./.github/benchmarks/setup.ps1
       - name: Prepare dependencies and benchmark

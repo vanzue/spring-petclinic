@@ -41,12 +41,14 @@ foreach ($property in @(
         throw " ERROR - Unexpected $($property[0]); refusing a mismatched JDK.`n$settings"
     }
 }
-$base = Join-Path $env:GITHUB_WORKSPACE '.benchmark'
-foreach ($directory in @('m2', 'maven-user', 'tmp', 'results')) {
+$base = if ($env:HOBL_BENCHMARK_BASE) { $env:HOBL_BENCHMARK_BASE } else { Join-Path $env:GITHUB_WORKSPACE '.benchmark' }
+$results = Join-Path $env:GITHUB_WORKSPACE '.benchmark/results'
+New-Item -ItemType Directory -Path $results -Force | Out-Null
+foreach ($directory in @('m2', 'maven-user', 'tmp')) {
     New-Item -ItemType Directory -Path (Join-Path $base $directory) -Force | Out-Null
 }
-$settings | Set-Content (Join-Path $base 'results/java-environment.log')
-Copy-Item (Join-Path $PSScriptRoot 'pins.json') (Join-Path $base 'results/pins.json')
+$settings | Set-Content (Join-Path $results 'java-environment.log')
+Copy-Item (Join-Path $PSScriptRoot 'pins.json') (Join-Path $results 'pins.json')
 @(
     "JAVA_HOME=$env:JAVA_HOME"
     "MAVEN_USER_HOME=$(Join-Path $base 'maven-user')"

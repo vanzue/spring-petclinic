@@ -2,10 +2,11 @@ param([ValidateRange(1, 20)][int]$Loops = 5)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $pins = Get-Content (Join-Path $PSScriptRoot 'pins.json') -Raw | ConvertFrom-Json
-$project = Join-Path $env:GITHUB_WORKSPACE 'workload'
-$base = Join-Path $env:GITHUB_WORKSPACE '.benchmark'
-$results = Join-Path $base 'results'
+$project = if ($env:HOBL_WORKLOAD_PATH) { $env:HOBL_WORKLOAD_PATH } else { Join-Path $env:GITHUB_WORKSPACE 'workload' }
+$base = if ($env:HOBL_BENCHMARK_BASE) { $env:HOBL_BENCHMARK_BASE } else { Join-Path $env:GITHUB_WORKSPACE '.benchmark' }
+$results = Join-Path $env:GITHUB_WORKSPACE '.benchmark/results'
 $cache = Join-Path $base 'm2'
+$storage = if ($IsWindows) { $env:WINDOWS_STORAGE } else { 'default' }
 foreach ($variable in @('JAVA_TOOL_OPTIONS', '_JAVA_OPTIONS', 'JDK_JAVA_OPTIONS', 'MAVEN_OPTS', 'MAVEN_ARGS')) {
     if ([Environment]::GetEnvironmentVariable($variable)) {
         throw " ERROR - Unexpected inherited JVM/Maven configuration: $variable"
@@ -45,6 +46,11 @@ $environment = [ordered]@{
     java_home = $env:JAVA_HOME
     jdk_runtime = $pins.java_runtime_version
     maven_version = $pins.maven_version
+    requested_storage = $storage
+    workload_path = $project
+    cache_path = $cache
+    maven_user_home = $env:MAVEN_USER_HOME
+    temporary_path = $env:TMP
     jvm_config = Get-Content (Join-Path $project '.mvn/jvm.config') -Raw
     loops = $Loops
     timing = 'clean excluded; offline package -DskipTests plus offline test; wall-clock seconds'
@@ -116,6 +122,8 @@ for ($loop = 1; $loop -le $Loops; $loop++) {
 @(
     "## HOBL-style PetClinic: $env:RUNNER_OS ARM64"
     ''
+    "Storage: $storage. Workload: $project"
+    ''
     'Pinned Microsoft JDK 25+36-LTS; Maven 3.9.11. Prep and clean excluded from timing.'
     ''
     '| Loop | Build (s) | Test (s) | Total (s) |'
@@ -123,4 +131,8 @@ for ($loop = 1; $loop -le $Loops; $loop++) {
     $rows | ForEach-Object { "| $($_.loop) | $($_.build_time) | $($_.test_time) | $($_.scenario_runtime) |" }
     ''
     '**Different hosted runners have different hardware. These results are not an isolated OS/filesystem comparison.**'
+    if ($storage -eq 'DevDrive') {
+        ''
+        '**Dev Drive is hosted in a dynamic VHDX, unlike the default NTFS workspace. Results include virtual-disk overhead; antivirus settings were not changed.**'
+    }
 ) | Add-Content $env:GITHUB_STEP_SUMMARY
